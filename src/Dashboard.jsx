@@ -107,6 +107,12 @@ const dateLabel = (date) =>
       })
     : "Sin fecha";
 
+const isSavingsWithdrawal = (transaction) =>
+  transaction?.type === "expense" &&
+  String(transaction.title || "")
+    .toLowerCase()
+    .startsWith("retiro de ahorro:");
+
 // ========================================
 // APLICACIÓN
 // ========================================
@@ -362,7 +368,7 @@ function App({ userId, user, onLogout }) {
     .reduce((sum, t) => sum + Number(t.amount), 0);
 
   const expenseTotal = transactions
-    .filter((t) => t.type === "expense")
+    .filter((t) => t.type === "expense" && !isSavingsWithdrawal(t))
     .reduce((sum, t) => sum + Number(t.amount), 0);
 
   const savingsTotal = goals.reduce(
