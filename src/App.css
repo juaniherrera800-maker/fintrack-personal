@@ -1649,3 +1649,35 @@ select {
     width: 100%;
   }
 }
+.savings-goal-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.savings-goal-actions .savings-contribute-button {
+  flex: 1;
+  margin-top: 0;
+}
+
+.savings-withdraw-button {
+  flex: 1;
+  justify-content: center;
+  margin-top: 0;
+}
+
+.savings-withdraw-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (max-width: 480px) {
+  .savings-goal-actions {
+    flex-direction: column;
+  }
+
+  .savings-goal-actions button {
+    width: 100%;
+  }
+}

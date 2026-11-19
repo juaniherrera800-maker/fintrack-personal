@@ -152,6 +152,10 @@ function App({ userId, user, onLogout }) {
   const [goalModal, setGoalModal] = useState(null);
   const [contributionAmount, setContributionAmount] = useState("");
 
+  const [withdrawModal, setWithdrawModal] = useState(null);
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [withdrawLoading, setWithdrawLoading] = useState(false);
+
   const [goalForm, setGoalForm] = useState({
     name: "",
     target: "",
@@ -967,6 +971,65 @@ function App({ userId, user, onLogout }) {
 
     setContributionAmount("");
     setGoalModal(null);
+  };
+
+  const withdrawFromGoal = async (e) => {
+    e.preventDefault();
+
+    const amount = Number(withdrawAmount);
+    const goal = goals.find((item) => item.id === withdrawModal);
+
+    if (!goal || !Number.isFinite(amount) || amount <= 0) {
+      window.alert("Ingresá un importe válido.");
+      return;
+    }
+
+    const saved = (goal.contributions || []).reduce(
+      (sum, item) => sum + Number(item.amount),
+      0,
+    );
+
+    if (amount > saved) {
+      window.alert(
+        `No podés retirar más de lo que tenés ahorrado. Disponible: ${money(saved)}.`,
+      );
+      return;
+    }
+
+    setWithdrawLoading(true);
+    setDataError("");
+
+    try {
+      const { data, error } = await supabase.rpc("withdraw_from_goal", {
+        p_goal_id: goal.id,
+        p_amount: amount,
+        p_date: today(),
+      });
+
+      if (error) throw error;
+
+      if (!data?.goal || !data?.transaction) {
+        throw new Error(
+          "La operación se realizó, pero no se recibió la información actualizada.",
+        );
+      }
+
+      setGoals((prev) =>
+        prev.map((item) => (item.id === goal.id ? data.goal : item)),
+      );
+
+      setTransactions((prev) => [data.transaction, ...prev]);
+
+      setWithdrawAmount("");
+      setWithdrawModal(null);
+
+      window.alert(`Retiraste ${money(amount)} de "${goal.name}".`);
+    } catch (error) {
+      setDataError(error.message);
+      window.alert(`No se pudo realizar el retiro: ${error.message}`);
+    } finally {
+      setWithdrawLoading(false);
+    }
   };
 
   const deleteGoal = async (id) => {
@@ -2053,29 +2116,65 @@ function App({ userId, user, onLogout }) {
                             </span>
                           </div>
 
-                          <button
-                            className="primary-button savings-contribute-button"
-                            disabled={complete}
-                            onClick={() => {
-                              setGoalModal(goal.id);
-                              setContributionAmount("");
-                            }}
-                          >
-                            <Plus size={17} />{" "}
-                            {complete
-                              ? "Objetivo completado"
-                              : "Agregar ahorro"}
-                          </button>
+                          <div className="savings-goal-actions">
+                            <button
+                              className="primary-button savings-contribute-button"
+                              disabled={complete}
+                              onClick={() => {
+                                setGoalModal(goal.id);
+                                setContributionAmount("");
+                              }}
+                            >
+                              <Plus size={17} />
+                              {complete
+                                ? "Objetivo completado"
+                                : "Agregar ahorro"}
+                            </button>
+
+                            <button
+                              type="button"
+                              className="secondary-button savings-withdraw-button"
+                              disabled={saved <= 0}
+                              onClick={() => {
+                                setWithdrawModal(goal.id);
+                                setWithdrawAmount("");
+                              }}
+                            >
+                              <ArrowDownRight size={17} />
+                              Retirar dinero
+                            </button>
+                          </div>
 
                           {(goal.contributions || []).length > 0 && (
                             <div className="savings-history">
-                              <strong>Historial de aportes</strong>
-                              {[...goal.contributions].reverse().map((c) => (
-                                <div className="savings-history-row" key={c.id}>
-                                  <span>{dateLabel(c.date)}</span>
-                                  <strong>+{money(c.amount)}</strong>
-                                </div>
-                              ))}
+                              <strong>Historial de movimientos</strong>
+
+                              {[...goal.contributions].reverse().map((c) => {
+                                const isWithdrawal = Number(c.amount) < 0;
+
+                                return (
+                                  <div
+                                    className="savings-history-row"
+                                    key={c.id}
+                                  >
+                                    <span>
+                                      {isWithdrawal ? "Retiro" : "Aporte"} ·{" "}
+                                      {dateLabel(c.date)}
+                                    </span>
+
+                                    <strong
+                                      style={{
+                                        color: isWithdrawal
+                                          ? "#f17d83"
+                                          : "#39d9a1",
+                                      }}
+                                    >
+                                      {isWithdrawal ? "−" : "+"}
+                                      {money(Math.abs(Number(c.amount)))}
+                                    </strong>
+                                  </div>
+                                );
+                              })}
                             </div>
                           )}
                         </div>
@@ -3029,6 +3128,101 @@ function App({ userId, user, onLogout }) {
               </button>
               <button type="submit" className="primary-button">
                 <Check size={16} /> Confirmar aporte
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* MODAL DE RETIRO DE AHORRO */}
+
+      {withdrawModal !== null && (
+        <div
+          className="modal-backdrop"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !withdrawLoading) {
+              setWithdrawModal(null);
+            }
+          }}
+        >
+          <form className="transaction-modal" onSubmit={withdrawFromGoal}>
+            <div className="modal-heading">
+              <div>
+                <div className="eyebrow">RETIRO DE AHORRO</div>
+                <h2>Retirar dinero</h2>
+              </div>
+
+              <button
+                type="button"
+                className="icon-button"
+                disabled={withdrawLoading}
+                onClick={() => setWithdrawModal(null)}
+              >
+                <X />
+              </button>
+            </div>
+
+            {(() => {
+              const goal = goals.find((item) => item.id === withdrawModal);
+
+              const saved = (goal?.contributions || []).reduce(
+                (sum, item) => sum + Number(item.amount),
+                0,
+              );
+
+              return (
+                <>
+                  <p className="savings-modal-description">
+                    {goal
+                      ? `Vas a retirar dinero de tu objetivo "${goal.name}".`
+                      : "Seleccioná el importe que querés retirar."}
+                  </p>
+
+                  <div className="savings-available">
+                    <span>Dinero ahorrado en este objetivo</span>
+                    <strong>{money(saved)}</strong>
+                  </div>
+
+                  <label>
+                    ¿Cuánto querés retirar?
+                    <input
+                      autoFocus
+                      required
+                      type="number"
+                      min="0.01"
+                      max={saved}
+                      step="0.01"
+                      placeholder="Ej. 25000"
+                      value={withdrawAmount}
+                      onChange={(e) => setWithdrawAmount(e.target.value)}
+                    />
+                  </label>
+
+                  <p className="savings-modal-description">
+                    El retiro también se registrará automáticamente como un
+                    gasto en tus movimientos.
+                  </p>
+                </>
+              );
+            })()}
+
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={withdrawLoading}
+                onClick={() => setWithdrawModal(null)}
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="submit"
+                className="primary-button"
+                disabled={withdrawLoading}
+              >
+                <Check size={16} />
+                {withdrawLoading ? "Procesando..." : "Confirmar retiro"}
               </button>
             </div>
           </form>
