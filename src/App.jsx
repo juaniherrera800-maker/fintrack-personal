@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { LogOut, Wallet } from "lucide-react";
+import { Wallet } from "lucide-react";
 import Auth from "./Auth";
 import Dashboard from "./Dashboard";
 import { supabase } from "./lib/supabase";
@@ -8,7 +8,6 @@ import "./App.css";
 export default function App() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -51,14 +50,10 @@ export default function App() {
 
     if (!confirmed) return;
 
-    setSigningOut(true);
-    setError("");
-
     const { error } = await supabase.auth.signOut();
 
     if (error) {
       setError(error.message);
-      setSigningOut(false);
     }
   }
 
@@ -82,23 +77,11 @@ export default function App() {
 
   return (
     <>
-      <Dashboard userId={session.user.id} />
-
-      <div className="fintrack-session-control">
-        <div className="fintrack-session-info">
-          <span className="fintrack-session-dot" />
-          <span>{session.user.email}</span>
-        </div>
-
-        <button
-          onClick={handleLogout}
-          disabled={signingOut}
-          title="Cerrar sesión"
-        >
-          <LogOut size={16} />
-          {signingOut ? "Saliendo..." : "Salir"}
-        </button>
-      </div>
+      <Dashboard
+        userId={session.user.id}
+        user={session.user}
+        onLogout={handleLogout}
+      />
 
       {error && <div className="fintrack-session-error">{error}</div>}
     </>

@@ -9,41 +9,72 @@ export default function Auth() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState("");
 
   async function handleSubmit(e) {
     e.preventDefault();
+
     setLoading(true);
     setMessage("");
+    setMessageType("");
+
+    const cleanEmail = email.trim().toLowerCase();
 
     try {
       if (mode === "register") {
         const { data, error } = await supabase.auth.signUp({
-          email,
+          email: cleanEmail,
           password,
         });
 
         if (error) throw error;
 
         if (data.session) {
-          setMessage("¡Cuenta creada correctamente!");
+          setMessage("¡Cuenta creada! Ingresando a FinTrack...");
+          setMessageType("success");
         } else {
           setMessage(
-            "Cuenta creada. Revisá tu correo para confirmar el registro.",
+            "La cuenta fue creada, pero todavía requiere confirmación. Revisá que Confirm email esté desactivado en Supabase.",
           );
+          setMessageType("error");
         }
       } else {
         const { error } = await supabase.auth.signInWithPassword({
-          email,
+          email: cleanEmail,
           password,
         });
 
         if (error) throw error;
       }
     } catch (error) {
-      setMessage(error.message || "Ocurrió un error.");
+      let friendlyMessage = error.message;
+
+      if (error.message?.toLowerCase().includes("already registered")) {
+        friendlyMessage =
+          "Este correo ya tiene una cuenta. Probá iniciar sesión.";
+      } else if (
+        error.message?.toLowerCase().includes("invalid login credentials")
+      ) {
+        friendlyMessage = "Correo o contraseña incorrectos.";
+      } else if (error.message?.toLowerCase().includes("email not confirmed")) {
+        friendlyMessage =
+          "Tu correo todavía no está confirmado. Revisá la configuración de Supabase.";
+      } else if (error.message?.toLowerCase().includes("password")) {
+        friendlyMessage = "La contraseña debe tener al menos 6 caracteres.";
+      }
+
+      setMessage(friendlyMessage || "Ocurrió un error.");
+      setMessageType("error");
     } finally {
       setLoading(false);
     }
+  }
+
+  function changeMode(newMode) {
+    setMode(newMode);
+    setMessage("");
+    setMessageType("");
+    setPassword("");
   }
 
   return (
@@ -58,10 +89,11 @@ export default function Auth() {
 
         <div className="auth-heading">
           <h1>{mode === "login" ? "Bienvenido de nuevo" : "Creá tu cuenta"}</h1>
+
           <p>
             {mode === "login"
               ? "Ingresá para administrar tus finanzas."
-              : "Empezá a organizar tu dinero de forma inteligente."}
+              : "Organizá tus gastos de forma simple."}
           </p>
         </div>
 
@@ -72,10 +104,12 @@ export default function Auth() {
             placeholder="tu@email.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            autoComplete="email"
             required
           />
 
           <label>Contraseña</label>
+
           <div className="auth-password">
             <input
               type={showPassword ? "text" : "password"}
@@ -83,8 +117,12 @@ export default function Auth() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               minLength={6}
+              autoComplete={
+                mode === "login" ? "current-password" : "new-password"
+              }
               required
             />
+
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
@@ -94,9 +132,13 @@ export default function Auth() {
             </button>
           </div>
 
-          {message && <div className="auth-message">{message}</div>}
+          {message && (
+            <div className={`auth-message ${messageType}`} role="alert">
+              {message}
+            </div>
+          )}
 
-          <button className="auth-submit" disabled={loading}>
+          <button type="submit" className="auth-submit" disabled={loading}>
             {loading
               ? "Procesando..."
               : mode === "login"
@@ -109,24 +151,14 @@ export default function Auth() {
           {mode === "login" ? (
             <>
               ¿Todavía no tenés cuenta?{" "}
-              <button
-                onClick={() => {
-                  setMode("register");
-                  setMessage("");
-                }}
-              >
+              <button type="button" onClick={() => changeMode("register")}>
                 Registrate
               </button>
             </>
           ) : (
             <>
               ¿Ya tenés cuenta?{" "}
-              <button
-                onClick={() => {
-                  setMode("login");
-                  setMessage("");
-                }}
-              >
+              <button type="button" onClick={() => changeMode("login")}>
                 Iniciá sesión
               </button>
             </>

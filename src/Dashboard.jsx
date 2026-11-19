@@ -32,6 +32,11 @@ import {
   ChevronLeft,
   ChevronRight,
   FileText,
+  UserRound,
+  Mail,
+  LockKeyhole,
+  Save,
+  LogOut,
 } from "lucide-react";
 
 import { supabase } from "./lib/supabase";
@@ -106,7 +111,7 @@ const dateLabel = (date) =>
 // APLICACIÓN
 // ========================================
 
-function App({ userId }) {
+function App({ userId, user, onLogout }) {
   // Las claves v2 permiten comenzar sin los datos de demostración anteriores.
   const [transactions, setTransactions] = useState([]);
   const [dataLoading, setDataLoading] = useState(true);
@@ -118,6 +123,18 @@ function App({ userId }) {
   const [recurring, setRecurring] = useState([]);
 
   const [page, setPage] = useState("dashboard");
+  const [profileName, setProfileName] = useState(
+    user?.user_metadata?.full_name || "",
+  );
+
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+
+  const [profileMessage, setProfileMessage] = useState("");
+  const [profileError, setProfileError] = useState("");
   const [mobileMenu, setMobileMenu] = useState(false);
 
   const [modal, setModal] = useState(false);
@@ -647,7 +664,98 @@ function App({ userId }) {
     { id: "reports", label: "Informes", icon: FileText },
     { id: "recurring", label: "Recurrentes", icon: Repeat },
     { id: "settings", label: "Configuración", icon: Settings },
+    { id: "profile", label: "Mi perfil", icon: UserRound },
   ];
+
+  // ========================================
+  // PERFIL Y SEGURIDAD
+  // ========================================
+
+  useEffect(() => {
+    setProfileName(user?.user_metadata?.full_name || "");
+  }, [user]);
+
+  const saveProfile = async (e) => {
+    e.preventDefault();
+
+    const name = profileName.trim();
+
+    if (!name) {
+      setProfileError("Ingresá tu nombre.");
+      return;
+    }
+
+    setProfileLoading(true);
+    setProfileError("");
+    setProfileMessage("");
+
+    const { data, error } = await supabase.auth.updateUser({
+      data: {
+        full_name: name,
+      },
+    });
+
+    setProfileLoading(false);
+
+    if (error) {
+      setProfileError(error.message);
+      return;
+    }
+
+    setProfileName(data.user.user_metadata.full_name || name);
+    setProfileMessage("Tu perfil se actualizó correctamente.");
+  };
+
+  const changePassword = async (e) => {
+    e.preventDefault();
+
+    setProfileError("");
+    setProfileMessage("");
+
+    if (newPassword.length < 6) {
+      setProfileError("La contraseña debe tener al menos 6 caracteres.");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setProfileError("Las contraseñas no coinciden.");
+      return;
+    }
+
+    setPasswordLoading(true);
+
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
+
+    setPasswordLoading(false);
+
+    if (error) {
+      setProfileError(error.message);
+      return;
+    }
+
+    setNewPassword("");
+    setConfirmPassword("");
+    setProfileMessage("Tu contraseña se cambió correctamente.");
+  };
+
+  const handleLogout = async () => {
+    const confirmed = window.confirm(
+      "¿Estás seguro de que querés cerrar sesión?",
+    );
+
+    if (!confirmed) return;
+
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      window.alert(`No se pudo cerrar sesión: ${error.message}`);
+      return;
+    }
+
+    if (onLogout) onLogout();
+  };
 
   // ========================================
   // MOVIMIENTOS
@@ -2631,6 +2739,153 @@ function App({ userId }) {
                     );
                   })
                 )}
+              </div>
+            </>
+          )}
+
+          {/* MI PERFIL */}
+
+          {page === "profile" && (
+            <>
+              <div className="welcome-row">
+                <div>
+                  <div className="eyebrow">CUENTA PERSONAL</div>
+                  <h1>Mi perfil</h1>
+                  <p>Administrá tu información personal y seguridad.</p>
+                </div>
+              </div>
+
+              <div className="panel settings-panel">
+                <div className="panel-heading">
+                  <div>
+                    <h2>Información personal</h2>
+                    <p>Actualizá los datos de tu cuenta.</p>
+                  </div>
+                  <UserRound size={23} />
+                </div>
+
+                <div className="profile-card">
+                  <div className="avatar profile-large-avatar">
+                    {(profileName || user?.email || "U")
+                      .charAt(0)
+                      .toUpperCase()}
+                  </div>
+
+                  <div>
+                    <h3>{profileName || "Usuario FinTrack"}</h3>
+                    <span>{user?.email || "Sin correo electrónico"}</span>
+                  </div>
+                </div>
+
+                <form className="profile-form" onSubmit={saveProfile}>
+                  <label>
+                    Nombre completo
+                    <div className="profile-input">
+                      <UserRound size={17} />
+                      <input
+                        type="text"
+                        placeholder="Tu nombre"
+                        value={profileName}
+                        onChange={(e) => setProfileName(e.target.value)}
+                      />
+                    </div>
+                  </label>
+
+                  <label>
+                    Correo electrónico
+                    <div className="profile-input disabled">
+                      <Mail size={17} />
+                      <input type="email" value={user?.email || ""} disabled />
+                    </div>
+                    <span className="settings-help">
+                      El correo está asociado a tu cuenta de acceso.
+                    </span>
+                  </label>
+
+                  <button
+                    type="submit"
+                    className="primary-button"
+                    disabled={profileLoading}
+                  >
+                    <Save size={17} />
+                    {profileLoading ? "Guardando..." : "Guardar cambios"}
+                  </button>
+                </form>
+              </div>
+
+              <div className="panel settings-panel">
+                <div className="panel-heading">
+                  <div>
+                    <h2>Seguridad de la cuenta</h2>
+                    <p>Actualizá tu contraseña de acceso.</p>
+                  </div>
+                  <LockKeyhole size={23} />
+                </div>
+
+                <form className="profile-form" onSubmit={changePassword}>
+                  <label>
+                    Nueva contraseña
+                    <input
+                      type="password"
+                      required
+                      minLength={6}
+                      placeholder="Mínimo 6 caracteres"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                    />
+                  </label>
+
+                  <label>
+                    Confirmar contraseña
+                    <input
+                      type="password"
+                      required
+                      minLength={6}
+                      placeholder="Repetí tu nueva contraseña"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                    />
+                  </label>
+
+                  <button
+                    type="submit"
+                    className="primary-button"
+                    disabled={passwordLoading}
+                  >
+                    <LockKeyhole size={17} />
+                    {passwordLoading ? "Actualizando..." : "Cambiar contraseña"}
+                  </button>
+                </form>
+              </div>
+
+              {(profileMessage || profileError) && (
+                <div className="panel">
+                  <p
+                    style={{
+                      color: profileError ? "#f17d83" : "#39d9a1",
+                      margin: 0,
+                    }}
+                  >
+                    {profileError || profileMessage}
+                  </p>
+                </div>
+              )}
+
+              <div className="panel settings-panel">
+                <div className="panel-heading">
+                  <div>
+                    <h2>Sesión</h2>
+                    <p>Administrá el acceso a tu cuenta.</p>
+                  </div>
+                  <LogOut size={22} />
+                </div>
+
+                <div className="settings-actions">
+                  <button className="danger-button" onClick={handleLogout}>
+                    <LogOut size={16} />
+                    Cerrar sesión
+                  </button>
+                </div>
               </div>
             </>
           )}
